@@ -1,0 +1,3 @@
+"""
+EasyPrint Server Application
+"""

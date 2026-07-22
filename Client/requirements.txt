@@ -1,0 +1,7 @@
+# EasyPrint Client Dependencies
+# UI Framework
+PySide6>=6.5.0
+qasync>=0.27.0
+
+# Windows specific (printer operations, registry)
+pywin32>=306; sys_platform == 'win32'

@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EasyPrint Server - 管理后台</title>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/element-plus/2.3.14/index.min.css">
+    <link rel="stylesheet" id="dark-css" href="https://cdn.staticfile.org/element-plus/2.3.14/theme-chalk/dark/css-vars.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #f0f2f5; }
+        html.dark body { background: #141414; color: #e5eaf3; }
+        .app-header { background: #1890ff; color: #fff; padding: 0 24px; height: 64px; display: flex; align-items: center; justify-content: space-between; }
+        .app-header h1 { font-size: 20px; font-weight: 500; }
+        .app-header .version { font-size: 12px; opacity: 0.8; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .theme-toggle-btn {
+            background: rgba(255,255,255,0.15);
+            border: none;
+            color: #fff;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: background 0.2s;
+        }
+        .theme-toggle-btn:hover { background: rgba(255,255,255,0.25); }
+        .main-container { padding: 20px; max-width: 1400px; margin: 0 auto; }
+        .dashboard-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .stat-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        html.dark .stat-card { background: #1d1e1f; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        .stat-card .number { font-size: 32px; font-weight: 600; margin: 8px 0; }
+        .stat-card .label { font-size: 14px; color: #666; }
+        html.dark .stat-card .label { color: #a3a6ad; }
+        .stat-card.online .number { color: #52c41a; }
+        .stat-card.offline .number { color: #ff4d4f; }
+        .stat-card.total .number { color: #1890ff; }
+        .stat-card.jobs .number { color: #faad14; }
+        .content-card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        html.dark .content-card { background: #1d1e1f; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+        .section-title { font-size: 16px; font-weight: 500; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0; }
+        html.dark .section-title { color: #e5eaf3; border-bottom-color: #303133; }
+        .device-status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .device-status-dot.online { background: #52c41a; }
+        .device-status-dot.offline { background: #ff4d4f; }
+        .refresh-btn { float: right; }
+        .auto-refresh { margin-left: 12px; color: #666; font-size: 13px; }
+        html.dark .auto-refresh { color: #a3a6ad; }
+        .log-time { color: #999; font-size: 12px; }
+        html.dark .log-time { color: #6b7280; }
+        .log-action { font-weight: 500; }
+        .el-tabs { margin-bottom: 0; }
+        html.dark .el-tabs__item { color: #cfd3dc; }
+        html.dark .el-tabs__item.is-active { color: #409eff; }
+        html.dark .el-tabs__active-bar { background-color: #409eff; }
+        html.dark .el-tabs__nav-wrap::after { background-color: #414243; }
+
+        html.dark .el-tabs--border-card {
+            background: #1d1e1f !important;
+            border-color: #414243 !important;
+        }
+        html.dark .el-tabs--border-card > .el-tabs__header {
+            background-color: #1d1e1f !important;
+            border-bottom-color: #414243 !important;
+        }
+        html.dark .el-tabs--border-card > .el-tabs__header .el-tabs__item {
+            border-right-color: #414243 !important;
+            background-color: #1d1e1f !important;
+        }
+        html.dark .el-tabs--border-card > .el-tabs__header .el-tabs__item.is-active {
+            background-color: #1d1e1f !important;
+        }
+        html.dark .el-tabs--border-card > .el-tabs__content {
+            background-color: #1d1e1f !important;
+        }
+
+        .el-table th.el-table__cell,
+        .el-table td.el-table__cell {
+            text-align: center;
+            vertical-align: middle;
+            padding: 8px 4px;
+        }
+        .el-table th.el-table__cell {
+            background-color: #fafafa;
+            font-weight: 500;
+        }
+        html.dark .el-table th.el-table__cell {
+            background-color: #1d1e1f;
+            color: #cfd3dc;
+        }
+        html.dark .el-table tr {
+            background-color: #1d1e1f;
+        }
+        html.dark .el-table tr.el-table__row--striped {
+            background-color: #262727 !important;
+        }
+        html.dark .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+            background-color: #2d2e2f;
+        }
+        html.dark .el-table td.el-table__cell {
+            color: #cfd3dc;
+            border-bottom-color: #414243;
+        }
+        html.dark .el-table::before {
+            background-color: #414243;
+        }
+        .el-table .el-button {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+        .el-table {
+            width: 100%;
+            table-layout: auto;
+        }
+        .el-table__header-wrapper,
+        .el-table__body-wrapper {
+            overflow-x: auto;
+        }
+
+        html.dark ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        html.dark ::-webkit-scrollbar-track {
+            background: #1d1e1f;
+        }
+        html.dark ::-webkit-scrollbar-thumb {
+            background: #414243;
+            border-radius: 4px;
+        }
+        html.dark ::-webkit-scrollbar-thumb:hover {
+            background: #555657;
+        }
+        html.dark .el-card {
+            background: #1d1e1f;
+            border-color: #414243;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div class="app-header">
+        <h1>EasyPrint Server 管理后台</h1>
+        <div class="header-right">
+            <span class="version">v{{ version }}</span>
+            <button class="theme-toggle-btn" @click="toggleTheme" :title="isDark ? '切换到浅色模式' : '切换到深色模式'">
+                {{ isDark ? '☀️' : '🌙' }}
+            </button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- 统计卡片 -->
+        <div class="dashboard-cards">
+            <div class="stat-card total">
+                <div class="label">总设备数</div>
+                <div class="number">{{ stats.total_devices }}</div>
+            </div>
+            <div class="stat-card online">
+                <div class="label">在线设备</div>
+                <div class="number">{{ stats.online_devices }}</div>
+            </div>
+            <div class="stat-card offline">
+                <div class="label">离线设备</div>
+                <div class="number">{{ stats.offline_devices }}</div>
+            </div>
+            <div class="stat-card total">
+                <div class="label">打印机总数</div>
+                <div class="number">{{ stats.total_printers }}</div>
+            </div>
+            <div class="stat-card online">
+                <div class="label">在线打印机</div>
+                <div class="number">{{ stats.online_printers }}</div>
+            </div>
+            <div class="stat-card jobs">
+                <div class="label">今日任务</div>
+                <div class="number">{{ stats.today_jobs }}</div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <el-tabs v-model="activeTab" type="border-card">
+            <!-- 设备列表 -->
+            <el-tab-pane label="设备管理" name="devices">
+                <div class="content-card">
+                    <div class="section-title">
+                        设备列表
+                        <el-button class="refresh-btn" size="small" type="primary" @click="loadDevices">刷新</el-button>
+                        <span class="auto-refresh">
+                            <el-checkbox v-model="autoRefresh" size="small">自动刷新 (5秒)</el-checkbox>
+                        </span>
+                    </div>
+                    <el-table :data="devices" stripe width="100%" table-layout="auto">
+                        <el-table-column prop="device_id" label="设备ID" width="200"></el-table-column>
+                        <el-table-column prop="device_name" label="设备名称" width="160"></el-table-column>
+                        <el-table-column label="类型" width="100">
+                            <template #default="scope">
+                                <el-tag :type="scope.row.device_type === 'host' ? 'success' : (scope.row.device_type === 'mixed' ? 'warning' : 'primary')">
+                                    {{ typeLabel(scope.row.device_type) }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="ip_address" label="IP地址" width="130"></el-table-column>
+                        <el-table-column label="状态" width="110">
+                            <template #default="scope">
+                                <span class="device-status-dot" :class="scope.row.is_online ? 'online' : 'offline'"></span>
+                                {{ scope.row.is_online ? '在线' : '离线' }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="last_heartbeat" label="最后心跳" width="210">
+                            <template #default="scope">
+                                {{ formatTime(scope.row.last_heartbeat) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="os_version" label="操作系统" width="200"></el-table-column>
+                        <el-table-column label="操作" width="140">
+                            <template #default="scope">
+                                <el-button size="small" type="danger" @click="deleteDevice(scope.row)">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+            </el-tab-pane>
+
+            <!-- 打印机列表 -->
+            <el-tab-pane label="打印机管理" name="printers">
+                <div class="content-card">
+                    <div class="section-title">
+                        打印机列表
+                        <el-button class="refresh-btn" size="small" type="primary" @click="loadPrinters">刷新</el-button>
+                    </div>
+                    <el-table :data="printers" stripe width="100%" table-layout="auto">
+                        <el-table-column prop="printer_id" label="打印机ID" width="300"></el-table-column>
+                        <el-table-column prop="name" label="名称" width="240"></el-table-column>
+                        <el-table-column prop="model" label="型号" width="240"></el-table-column>
+                        <el-table-column label="状态" width="130">
+                            <template #default="scope">
+                                <el-tag :type="printerStatusType(scope.row.status)">
+                                    {{ printerStatusLabel(scope.row.status) }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="created_at" label="注册时间" width="240">
+                            <template #default="scope">
+                                {{ formatTime(scope.row.created_at) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="100">
+                            <template #default="scope">
+                                <el-button size="small" type="danger" @click="deletePrinter(scope.row)">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+            </el-tab-pane>
+
+            <!-- 任务列表 -->
+            <el-tab-pane label="打印任务" name="jobs">
+                <div class="content-card">
+                    <div class="section-title">
+                        任务列表
+                        <el-button class="refresh-btn" size="small" type="primary" @click="loadJobs">刷新</el-button>
+                    </div>
+                    <el-table :data="jobs" stripe width="100%" table-layout="auto">
+                        <el-table-column prop="job_id" label="任务ID" width="200"></el-table-column>
+                        <el-table-column prop="job_name" label="任务名称" width="300"></el-table-column>
+                        <el-table-column label="状态" width="120">
+                            <template #default="scope">
+                                <el-tag :type="jobStatusType(scope.row.status)">
+                                    {{ jobStatusLabel(scope.row.status) }}
+                                </el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="file_size" label="文件大小" width="120">
+                            <template #default="scope">
+                                {{ formatFileSize(scope.row.file_size) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="copies" label="份数" width="80"></el-table-column>
+                        <el-table-column prop="created_at" label="创建时间" width="240">
+                            <template #default="scope">
+                                {{ formatTime(scope.row.created_at) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="190">
+                            <template #default="scope">
+                                <el-button v-if="scope.row.status === 'created' || scope.row.status === 'transferring' || scope.row.status === 'queued' || scope.row.status === 'printing'"
+                                           size="small" type="danger" @click="cancelJob(scope.row)">取消</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </div>
+            </el-tab-pane>
+
+            <!-- 日志 -->
+            <el-tab-pane label="操作日志" name="logs">
+                <div class="content-card">
+                    <div class="section-title">
+                        最近操作
+                        <el-button class="refresh-btn" size="small" type="primary" @click="loadLogs">刷新</el-button>
+                    </div>
+                    <el-timeline>
+                        <el-timeline-item
+                            v-for="log in logs"
+                            :key="log.id"
+                            :type="logActionType(log.action)"
+                            :timestamp="formatTime(log.created_at)">
+                            <span class="log-action">{{ logActionLabel(log.action) }}</span>
+                            <span v-if="log.details"> - {{ log.details }}</span>
+                        </el-timeline-item>
+                    </el-timeline>
+                    <el-empty v-if="logs.length === 0" description="暂无日志"></el-empty>
+                </div>
+            </el-tab-pane>
+        </el-tabs>
+    </div>
+</div>
+
+<script src="https://cdn.staticfile.org/vue/3.3.4/vue.global.prod.min.js"></script>
+<script src="https://cdn.staticfile.org/element-plus/2.3.14/index.full.min.js"></script>
+<script>
+    const { createApp, ref, onMounted, onUnmounted } = Vue;
+    const { ElMessage, ElMessageBox } = ElementPlus;
+
+    const API_BASE = '/api';
+
+    createApp({
+        setup() {
+            const activeTab = ref('devices');
+            const autoRefresh = ref(true);
+            const version = ref('');
+            const isDark = ref(false);
+            const stats = ref({
+                total_devices: 0,
+                online_devices: 0,
+                offline_devices: 0,
+                total_printers: 0,
+                online_printers: 0,
+                today_jobs: 0
+            });
+            const devices = ref([]);
+            const printers = ref([]);
+            const jobs = ref([]);
+            const logs = ref([]);
+            let refreshTimer = null;
+
+            async function fetchJson(url) {
+                try {
+                    const res = await fetch(url);
+                    if (!res.ok) throw new Error(res.statusText);
+                    return await res.json();
+                } catch (e) {
+                    console.error('API Error:', e);
+                    return null;
+                }
+            }
+
+            async function loadStats() {
+                const data = await fetchJson(`${API_BASE}/stats`);
+                if (data) stats.value = data;
+            }
+
+            async function loadDevices() {
+                const data = await fetchJson(`${API_BASE}/devices/`);
+                if (data) devices.value = data.devices || [];
+            }
+
+            async function loadPrinters() {
+                const data = await fetchJson(`${API_BASE}/printers/`);
+                if (data) printers.value = data.printers || [];
+            }
+
+            async function loadJobs() {
+                const data = await fetchJson(`${API_BASE}/jobs/`);
+                if (data) jobs.value = data.jobs || [];
+            }
+
+            async function loadLogs() {
+                const data = await fetchJson(`${API_BASE}/logs`);
+                if (data) logs.value = data.logs || [];
+            }
+
+            async function loadAll() {
+                await Promise.all([
+                    loadStats(),
+                    loadDevices(),
+                    loadPrinters(),
+                    loadJobs(),
+                    loadLogs()
+                ]);
+            }
+
+            async function deleteDevice(device) {
+                try {
+                    await ElMessageBox.confirm(
+                        `确定要删除设备 "${device.device_name || device.device_id}" 吗？`,
+                        '确认删除',
+                        { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+                    );
+                    const res = await fetch(`${API_BASE}/devices/${device.device_id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        ElMessage.success('删除成功');
+                        loadDevices();
+                    } else {
+                        ElMessage.error('删除失败');
+                    }
+                } catch (e) {
+                    // cancelled
+                }
+            }
+
+            async function deletePrinter(printer) {
+                try {
+                    await ElMessageBox.confirm(
+                        `确定要删除打印机 "${printer.name || printer.printer_id}" 吗？`,
+                        '确认删除',
+                        { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+                    );
+                    const res = await fetch(`${API_BASE}/printers/${printer.printer_id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        ElMessage.success('删除成功');
+                        loadPrinters();
+                    } else {
+                        ElMessage.error('删除失败');
+                    }
+                } catch (e) {
+                    // cancelled
+                }
+            }
+
+            async function cancelJob(job) {
+                try {
+                    await ElMessageBox.confirm('确定要取消此打印任务吗？', '确认取消', {
+                        confirmButtonText: '取消任务', cancelButtonText: '放弃', type: 'warning'
+                    });
+                    const res = await fetch(`${API_BASE}/jobs/${job.job_id}/cancel`, { method: 'POST' });
+                    if (res.ok) {
+                        ElMessage.success('任务已取消');
+                        loadJobs();
+                    } else {
+                        ElMessage.error('取消失败');
+                    }
+                } catch (e) {
+                    // cancelled
+                }
+            }
+
+            function typeLabel(type) {
+                const map = { host: '主机端', user: '用户端', mixed: '混合' };
+                return map[type] || type;
+            }
+
+            function printerStatusType(status) {
+                const map = { online: 'success', offline: 'danger', busy: 'warning', error: 'danger' };
+                return map[status] || 'info';
+            }
+
+            function printerStatusLabel(status) {
+                const map = { online: '在线', offline: '离线', busy: '忙碌', error: '错误' };
+                return map[status] || status;
+            }
+
+            function jobStatusType(status) {
+                const map = {
+                    created: '', transferring: 'primary', queued: 'warning',
+                    printing: 'success', completed: 'success', failed: 'danger', cancelled: 'info'
+                };
+                return map[status] || 'info';
+            }
+
+            function jobStatusLabel(status) {
+                const map = {
+                    created: '已创建', transferring: '传输中', queued: '排队中',
+                    printing: '打印中', completed: '已完成', failed: '失败', cancelled: '已取消'
+                };
+                return map[status] || status;
+            }
+
+            function logActionType(action) {
+                const map = { create: 'primary', transfer: 'warning', print: 'success', complete: 'success', fail: 'danger', cancel: 'info' };
+                return map[action] || 'info';
+            }
+
+            function logActionLabel(action) {
+                const map = {
+                    create: '创建任务', transfer: '传输数据', print: '开始打印',
+                    complete: '打印完成', fail: '打印失败', cancel: '取消任务'
+                };
+                return map[action] || action;
+            }
+
+            function formatTime(iso) {
+                if (!iso) return '-';
+                if (typeof iso === 'string') {
+                    if (!iso.includes('Z') && !iso.includes('+') && !iso.includes('-')) {
+                        iso += 'Z';
+                    }
+                }
+                const d = new Date(iso);
+                if (isNaN(d.getTime())) return '-';
+                return d.toLocaleString('zh-CN');
+            }
+
+            function formatFileSize(bytes) {
+                if (!bytes) return '-';
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+            }
+
+            function toggleTheme() {
+                isDark.value = !isDark.value;
+                if (isDark.value) {
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('easyprint-theme', 'dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('easyprint-theme', 'light');
+                }
+            }
+
+            function initTheme() {
+                const saved = localStorage.getItem('easyprint-theme');
+                if (saved === 'dark') {
+                    isDark.value = true;
+                    document.documentElement.classList.add('dark');
+                } else if (saved === 'light') {
+                    isDark.value = false;
+                    document.documentElement.classList.remove('dark');
+                } else {
+                    // 跟随系统
+                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    if (prefersDark) {
+                        isDark.value = true;
+                        document.documentElement.classList.add('dark');
+                    }
+                }
+            }
+
+            onMounted(async () => {
+                initTheme();
+                // Load version
+                const info = await fetchJson('/');
+                if (info) version.value = info.version;
+
+                await loadAll();
+
+                refreshTimer = setInterval(() => {
+                    if (autoRefresh.value) loadAll();
+                }, 5000);
+            });
+
+            onUnmounted(() => {
+                if (refreshTimer) clearInterval(refreshTimer);
+            });
+
+            return {
+                activeTab, autoRefresh, version, isDark, stats,
+                devices, printers, jobs, logs,
+                loadDevices, loadPrinters, loadJobs, loadLogs,
+                deleteDevice, deletePrinter, cancelJob,
+                typeLabel, printerStatusType, printerStatusLabel,
+                jobStatusType, jobStatusLabel,
+                logActionType, logActionLabel,
+                formatTime, formatFileSize, toggleTheme
+            };
+        }
+    }).use(ElementPlus).mount('#app');
+</script>
+</body>
+</html>

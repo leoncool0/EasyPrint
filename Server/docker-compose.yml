@@ -1,0 +1,45 @@
+# EasyPrint Server Docker Compose
+version: '3.8'
+
+services:
+  easyprint-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: easyprint-server
+
+    # Ports mapping
+    ports:
+      - "8080:8080"        # HTTP API / Web UI
+      - "9100:9100"        # TCP Gateway (for clients)
+      - "20000:20000/udp"  # UDP Discovery
+
+    # Data persistence
+    volumes:
+      - /user/EasyPrint/data:/app/data    # SQLite database
+      - /user/EasyPrint/logs:/app/logs    # Log files
+
+    # Environment variables
+    environment:
+      - DEBUG=false
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
