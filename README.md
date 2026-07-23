@@ -1,66 +1,124 @@
+# EasyPrint
 
-# EasyPrint ️
+**EasyPrint** 是一款跨系统打印机共享软件，解决 Windows XP 与 Windows 10/11 之间因 SMB 协议禁用、驱动签名限制导致的打印机共享问题。
 
-**EasyPrint** 是一款专为解决跨操作系统打印机共享难题而设计的轻量级网络打印网关。它彻底打破了 Windows XP 与 Windows 10/11 之间因 SMB 协议禁用、驱动签名限制导致的“网络隔离”，让老旧设备与现代办公环境无缝连接。
+通过 "Docker 服务端 + 统一客户端" 架构，将复杂的系统级打印共享转化为简单的应用层数据转发。
 
-通过“Docker 服务端 + 统一客户端”的现代化架构，EasyPrint 将复杂的系统级共享转化为简单的应用层数据转发，让每一次打印都简单、稳定、安全。
+## 核心特性
 
-##  核心特性
+- **跨系统兼容**：绕过 SMBv1 和 RPC 限制，支持 Windows XP 到 Windows 11 全版本互联
+- **统一客户端**：一个安装包支持主机端、用户端、混合模式三种角色自由切换
+- **Docker 容器化部署**：服务端一行命令启动，支持 NAS、Linux、云服务器
+- **虚拟打印机**：用户端自动创建虚拟打印机，拦截打印任务并转发
+- **Web 管理后台**：设备监控、打印机管理、任务队列、深色/浅色主题切换
+- **实时状态同步**：打印任务状态（创建→传输→排队→打印→完成/失败）全程追踪
 
--  **跨时代兼容**：完美支持 Windows XP 到 Windows 11 的全版本互联，彻底绕过 SMBv1 和 RPC 限制。
--  **统一客户端**：一个安装包搞定一切。通过勾选即可在“打印机主机”与“网络用户”之间自由切换，支持混合模式。
--  **Docker 容器化部署**：服务端轻量、稳定、跨平台。一行命令即可在 NAS、Linux 或云服务器上启动打印中枢。
--  **即插即用体验**：内置虚拟打印机驱动，用户端一键映射，无需手动安装老旧的硬件驱动。
-- ️ **企业级管理**：提供现代化的 Web 管理后台，支持设备监控、打印日志审计、任务队列管理及权限控制。
--  **高可用设计**：支持断线重连、本地任务缓存与状态实时反馈（缺纸/卡纸/离线）。
+## 架构概览
 
-## ️ 架构概览
+```
+┌─────────────┐        TCP/9100        ┌─────────────────┐        TCP/9100        ┌─────────────┐
+│  用户端客户端  │ ────────────────────── │   服务端 (Docker)  │ ────────────────────── │  主机端客户端  │
+│  (Win 10/11) │   打印数据转发 (XPS)    │  FastAPI + SQLite │   打印数据转发 (XPS)    │   (Win XP)   │
+│              │                        │   Web: :8080      │                        │              │
+│  虚拟打印机   │                        │   TCP: :9100      │                        │  物理打印机   │
+└─────────────┘                        └─────────────────┘                        └─────────────┘
+```
 
-EasyPrint 采用经典的 Client-Server 架构，通过自定义 TCP 协议进行高效的数据路由：
+1. **Server (Docker)**：设备注册、心跳检测、任务队列调度、数据流转发、Web 管理后台
+2. **Host Client (主机端)**：运行在连接物理打印机的电脑上，接收服务端转发的打印数据并输出到本地打印机
+3. **User Client (用户端)**：运行在需要打印的电脑上，通过虚拟打印机拦截打印任务，封装后发送至服务端
 
-1. **Server (Docker)**: 系统的“大脑”。负责设备注册、心跳检测、任务队列调度与数据流转发。
-2. **Host Client (主机端)**: 运行在连接物理打印机的电脑上（如 Win XP）。负责捕获本地打印数据或接收服务端转发的数据流，并透传给物理设备。
-3. **User Client (用户端)**: 运行在需要打印的电脑上（如 Win 10/11）。通过虚拟打印机拦截打印任务，封装后发送至服务端。
+## 打印流程
 
-##  快速开始
+1. 用户端虚拟打印机拦截打印任务 → 生成 XPS 格式 spool 文件
+2. 客户端读取 spool 文件 → 通过 TCP 协议发送到服务端
+3. 服务端转发打印数据到目标主机端
+4. 主机端接收 XPS 数据 → 用 PyMuPDF 渲染为图像 → 通过 GDI 发送到物理打印机
 
-### 1. 部署服务端 (Server)
+## 快速开始
 
-确保您的服务器已安装 Docker 和 Docker Compose。
+### 1. 部署服务端
+
+确保服务器已安装 Docker 和 Docker Compose。
 
 ```bash
-# 创建项目目录
-mkdir easyprint-server && cd easyprint-server
-
-# 下载 docker-compose.yml 配置文件
-# (请替换为实际的仓库链接或本地文件路径)
-wget https://raw.githubusercontent.com/your-repo/easyprint/main/docker-compose.yml
+# 上传 server 目录到服务器 /user/EasyPrint
+cd /user/EasyPrint/server
 
 # 启动服务
 docker-compose up -d
 ```
-启动后，访问 `http://<服务器IP>:8080` 进入 Web 管理后台。
 
-### 2. 安装客户端 (Client)
+启动后访问 `http://<服务器IP>:8080` 进入 Web 管理后台。
 
-1. 下载最新版本的 `EasyPrint_Setup.exe`。
-2. 运行安装程序，选择语言并同意许可协议。
-3. 在**角色配置页**，根据当前电脑的功能进行勾选：
-   - [x] **我是打印机主机**（连接了物理打印机）
-   - [x] **我是普通用户**（需要打印网络文件）
-4. 输入 EasyPrint 服务端的 IP 地址和端口，完成配置。
+**默认端口：**
+- Web 管理后台：8080
+- TCP 网关：9100
+- 数据持久化：`/user/EasyPrint/data` 和 `/user/EasyPrint/logs`
 
-## ️ 技术栈
+### 2. 安装客户端
 
-- **Server**: Go / Node.js (轻量级高并发框架)
-- **Web UI**: Vue.js / React
-- **Client**: C++ (Win32 API / Qt) 确保对 Windows XP 的极致兼容
-- **Protocol**: Custom TCP / MQTT (轻量级物联网通信协议)
+1. 获取 `EasyPrint Client.exe`
+2. 首次运行进入配置向导：
+   - 输入服务端 IP 地址
+   - 选择角色：主机端 / 用户端 / 混合模式
+   - 主机端：选择要共享的打印机
+   - 用户端：选择要使用的远程打印机，自动创建虚拟打印机
+3. 完成配置后自动连接服务端，最小化到系统托盘
 
-##  贡献指南
+> **注意**：客户端需要以管理员身份运行，以访问 spool 目录和打印机 API。
 
-我们欢迎任何形式的贡献！如果您发现了 Bug 或有新的功能建议，请提交 Issue 或 Pull Request。
+## 技术栈
 
-##  开源协议
+| 组件 | 技术 |
+|------|------|
+| 服务端 | Python 3.11, FastAPI, SQLAlchemy 2.0 (async), SQLite (aiosqlite) |
+| 客户端 | Python 3.8, PySide6, qasync, PyInstaller |
+| Web UI | Vue 3 (CDN), Element Plus (CDN) |
+| 打印渲染 | PyMuPDF (fitz), Pillow (PIL), win32print/win32ui (GDI) |
+| 通信协议 | 自定义 TCP 二进制协议 |
+| 部署 | Docker, docker-compose |
+
+## 项目结构
+
+```
+EasyPrint/
+├── Server/                    # 服务端
+│   ├── app/
+│   │   ├── api/               # REST API (设备/打印机/任务/日志/统计)
+│   │   ├── models/            # 数据库模型 (SQLAlchemy)
+│   │   ├── tcp/               # TCP 网关 (连接管理/心跳/协议)
+│   │   ├── web/static/        # Web 管理后台 (单页应用)
+│   │   ├── config.py          # 配置
+│   │   └── main.py            # 入口
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── requirements.txt
+├── Client/                    # 客户端
+│   ├── src/
+│   │   ├── core/              # 核心逻辑 (客户端/配置管理)
+│   │   ├── network/           # TCP 连接
+│   │   ├── printer/           # 打印机扫描/虚拟打印机/Spool 监视
+│   │   ├── ui/                # 界面 (主窗口/向导/托盘)
+│   │   └── utils/             # 工具 (开机自启)
+│   ├── main.py                # 入口
+│   ├── build.bat              # 打包脚本
+│   └── requirements.txt
+├── .gitignore
+├── LICENSE
+└── README.md
+```
+
+## 打包客户端
+
+```bash
+cd Client
+# 使用 build.bat 打包（需要 Python 3.8 + PyInstaller）
+build.bat
+```
+
+生成的 exe 在 `Client/dist/EasyPrint Client.exe`。
+
+## 开源协议
 
 本项目基于 [MIT License](LICENSE) 开源。
