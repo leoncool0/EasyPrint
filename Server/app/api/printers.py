@@ -16,12 +16,27 @@ async def get_printers(
     online_only: bool = False,
     session: AsyncSession = Depends(get_session),
 ):
-    """Get list of all registered printers"""
-    query = select(Printer)
+    """Get list of all registered printers (with host device info)"""
+    query = select(Printer, Device).join(Device, Printer.host_device_id == Device.id, isouter=True)
     if online_only:
         query = query.where(Printer.status == "online")
     result = await session.execute(query)
-    printers = result.scalars().all()
+    rows = result.all()
+    printers = []
+    for printer, device in rows:
+        item = {
+            "id": printer.id,
+            "printer_id": printer.printer_id,
+            "name": printer.name,
+            "model": printer.model,
+            "status": printer.status,
+            "host_device_id": printer.host_device_id,
+            "is_shared": printer.is_shared,
+            "created_at": printer.created_at,
+            "host_device_name": device.device_name if device else "",
+            "host_device_id_str": device.device_id if device else "",
+        }
+        printers.append(item)
     return {"printers": printers}
 
 

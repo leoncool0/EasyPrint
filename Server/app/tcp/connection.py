@@ -270,17 +270,19 @@ class Connection:
 
         async with async_session_maker() as session:
             result = await session.execute(
-                select(Printer).where(Printer.status == "online", Printer.is_shared == True)
+                select(Printer, Device).join(Device, Printer.host_device_id == Device.id, isouter=True)
+                .where(Printer.status == "online", Printer.is_shared == True)
             )
-            printers = result.scalars().all()
+            rows = result.all()
 
             printer_list = []
-            for p in printers:
+            for p, device in rows:
                 printer_list.append({
                     "printer_id": p.printer_id,
                     "name": p.name,
                     "model": p.model,
                     "status": p.status,
+                    "host_device_name": device.device_name if device else "",
                 })
 
         response = create_response(MessageType.USER_LIST_RSP, {

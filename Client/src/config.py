@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # App Info
     APP_NAME: str = "EasyPrint Client"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "0.1.2"
     DEBUG: bool = True
 
     # Server Connection

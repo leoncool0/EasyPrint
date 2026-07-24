@@ -5,6 +5,8 @@ import logging
 import socket
 import platform
 import json
+import uuid
+import subprocess
 import urllib.request
 from pathlib import Path
 from typing import List
@@ -59,6 +61,54 @@ def get_computer_name() -> str:
         return platform.node() or "我的电脑"
     except Exception:
         return "我的电脑"
+
+
+def get_device_id() -> str:
+    """生成设备 ID（与客户端一致的逻辑）"""
+    try:
+        if platform.system() == "Windows":
+            output = subprocess.check_output(
+                ["ipconfig", "/all"], stderr=subprocess.STDOUT, text=True
+            )
+            for line in output.split("\n"):
+                if "物理地址" in line or "Physical Address" in line:
+                    parts = line.split(":")
+                    if len(parts) >= 2:
+                        mac = parts[1].strip().replace("-", ":")
+                        if len(mac) == 17:
+                            return f"device_{mac.replace(':', '')}"
+        elif platform.system() == "Linux":
+            output = subprocess.check_output(
+                ["cat", "/sys/class/net/eth0/address"], stderr=subprocess.STDOUT, text=True
+            )
+            mac = output.strip()
+            return f"device_{mac.replace(':', '')}"
+        elif platform.system() == "Darwin":
+            output = subprocess.check_output(
+                ["ifconfig", "en0"], stderr=subprocess.STDOUT, text=True
+            )
+            for line in output.split("\n"):
+                if "ether" in line:
+                    mac = line.split()[1]
+                    return f"device_{mac.replace(':', '')}"
+    except Exception as e:
+        logger.warning(f"生成设备 ID 失败: {e}")
+    return f"device_{uuid.uuid4().hex[:12]}"
+
+
+def check_device_registered(host: str, http_port: int, device_id: str) -> dict:
+    """检查服务端是否已注册该设备，返回设备信息或空字典"""
+    url = f"http://{host}:{http_port}/api/devices/{device_id}"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data
+            elif resp.status == 404:
+                return {}
+    except Exception as e:
+        logger.error(f"检查设备注册状态失败: {e}")
+    return {}
 
 
 # ==================== 向导页面 ====================
@@ -175,7 +225,39 @@ class ServerPage(QWizardPage):
         if not self._connection_ok:
             QMessageBox.warning(self, "提示", "请先测试连接并确保连接成功")
             return False
+
+        host = self.host_edit.text().strip()
+        http_port = int(self.http_port_edit.text().strip())
+        device_id = get_device_id()
+
+        self.test_result.setText("检查设备注册状态...")
+        self.test_result.setStyleSheet("color: #666;")
+
+        registered_device = check_device_registered(host, http_port, device_id)
+        if registered_device:
+            reply = QMessageBox.question(
+                self, "设备已注册",
+                f"检测到本机已在服务端注册：\n\n"
+                f"设备名称: {registered_device.get('device_name', '未知')}\n"
+                f"设备类型: {registered_device.get('device_type', '未知')}\n"
+                f"是否直接使用服务端配置？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                wizard = self.wizard()
+                if wizard:
+                    wizard._registered_config = registered_device
+                    wizard._skip_to_complete = True
+                return True
+
         return True
+
+    def nextId(self) -> int:
+        wizard = self.wizard()
+        if getattr(wizard, "_skip_to_complete", False):
+            return WizardPageId.COMPLETE
+        return WizardPageId.DEVICE
 
 
 class DevicePage(QWizardPage):
@@ -227,7 +309,24 @@ class DevicePage(QWizardPage):
         layout.addStretch()
         self.setLayout(layout)
 
-        self.registerField("device_name*", self.name_edit)
+        # 不使用 registerField 的必填验证，改用 isComplete() 手动控制
+        # 监听名称变化，实时更新下一步按钮状态
+        self.name_edit.textChanged.connect(lambda: self.completeChanged.emit())
+
+        # 初始化完成后立即触发一次验证，确保下一步按钮状态正确
+        self.completeChanged.emit()
+
+    def initializePage(self):
+        """页面显示时触发验证"""
+        self.completeChanged.emit()
+
+    def isComplete(self) -> bool:
+        """设备名称必填，类型默认已选中"""
+        # 设备名称不能为空
+        if not self.name_edit.text().strip():
+            return False
+        # 三种类型总有一个被选中（默认是用户端）
+        return True
 
     def get_device_type(self) -> str:
         if self.radio_host.isChecked():
@@ -239,6 +338,9 @@ class DevicePage(QWizardPage):
 
     def nextId(self) -> int:
         """根据类型决定下一页"""
+        wizard = self.wizard()
+        if getattr(wizard, "_skip_to_complete", False):
+            return WizardPageId.COMPLETE
         dev_type = self.get_device_type()
         if dev_type == "user":
             return WizardPageId.USER_PRINTERS  # 直接到用户端打印机页
@@ -327,8 +429,9 @@ class HostPrinterPage(QWizardPage):
 
     def nextId(self) -> int:
         """如果是混合模式，下一步到用户端打印机页；否则到自启页"""
-        # 需要检查设备类型 - 从 wizard 获取
         wizard = self.wizard()
+        if getattr(wizard, "_skip_to_complete", False):
+            return WizardPageId.COMPLETE
         device_page = wizard.page(WizardPageId.DEVICE)
         if device_page and device_page.get_device_type() == "mixed":
             return WizardPageId.USER_PRINTERS
@@ -392,7 +495,12 @@ class UserPrinterPage(QWizardPage):
             return
 
         for p in printers:
-            item_text = f"{p.get('name', '未知')}  ({p.get('model', '未知')})"
+            host_device_name = p.get("host_device_name", "")
+            if host_device_name:
+                display_name = f"[{host_device_name}] {p.get('name', '未知')}"
+            else:
+                display_name = p.get("name", "未知")
+            item_text = f"{display_name}  ({p.get('model', '未知')})"
             item = QListWidgetItem(item_text)
             item.setData(Qt.UserRole, p)
             self.printer_list.addItem(item)
@@ -452,6 +560,9 @@ class UserPrinterPage(QWizardPage):
         return True
 
     def nextId(self) -> int:
+        wizard = self.wizard()
+        if getattr(wizard, "_skip_to_complete", False):
+            return WizardPageId.COMPLETE
         return WizardPageId.AUTOSTART
 
 
@@ -493,32 +604,46 @@ class CompletePage(QWizardPage):
     def initializePage(self):
         """显示配置摘要"""
         wizard = self.wizard()
-        server_page = wizard.page(WizardPageId.SERVER)
-        device_page = wizard.page(WizardPageId.DEVICE)
+        registered_config = getattr(wizard, "_registered_config", None)
 
-        host = server_page.host_edit.text().strip()
-        dev_name = device_page.name_edit.text().strip()
-        dev_type = device_page.get_device_type()
-        type_label = {"host": "主机端", "user": "用户端", "mixed": "混合模式"}.get(dev_type, dev_type)
+        if registered_config:
+            host = wizard.page(WizardPageId.SERVER).host_edit.text().strip()
+            dev_name = registered_config.get("device_name", "未知")
+            dev_type = registered_config.get("device_type", "user")
+            type_label = {"host": "主机端", "user": "用户端", "mixed": "混合模式"}.get(dev_type, dev_type)
 
-        summary = f"配置摘要：\n\n"
-        summary += f"  服务端地址: {host}\n"
-        summary += f"  设备名称: {dev_name}\n"
-        summary += f"  设备类型: {type_label}\n"
+            summary = f"配置摘要（从服务端恢复）：\n\n"
+            summary += f"  服务端地址: {host}\n"
+            summary += f"  设备名称: {dev_name}\n"
+            summary += f"  设备类型: {type_label}\n"
+            summary += f"  提示: 将使用服务端保存的配置\n"
+        else:
+            server_page = wizard.page(WizardPageId.SERVER)
+            device_page = wizard.page(WizardPageId.DEVICE)
 
-        if dev_type in ("host", "mixed"):
-            host_page = wizard.page(WizardPageId.HOST_PRINTERS)
-            if host_page:
-                selected = host_page.get_selected_printers()
-                summary += f"  共享打印机: {len(selected)} 台\n"
+            host = server_page.host_edit.text().strip()
+            dev_name = device_page.name_edit.text().strip()
+            dev_type = device_page.get_device_type()
+            type_label = {"host": "主机端", "user": "用户端", "mixed": "混合模式"}.get(dev_type, dev_type)
 
-        if dev_type in ("user", "mixed"):
-            installed = getattr(wizard, "installed_virtual_printers", [])
-            summary += f"  虚拟打印机: {len(installed)} 台\n"
+            summary = f"配置摘要：\n\n"
+            summary += f"  服务端地址: {host}\n"
+            summary += f"  设备名称: {dev_name}\n"
+            summary += f"  设备类型: {type_label}\n"
 
-        autostart_page = wizard.page(WizardPageId.AUTOSTART)
-        autostart = autostart_page.autostart_check.isChecked()
-        summary += f"  开机自启: {'是' if autostart else '否'}\n"
+            if dev_type in ("host", "mixed"):
+                host_page = wizard.page(WizardPageId.HOST_PRINTERS)
+                if host_page:
+                    selected = host_page.get_selected_printers()
+                    summary += f"  共享打印机: {len(selected)} 台\n"
+
+            if dev_type in ("user", "mixed"):
+                installed = getattr(wizard, "installed_virtual_printers", [])
+                summary += f"  虚拟打印机: {len(installed)} 台\n"
+
+            autostart_page = wizard.page(WizardPageId.AUTOSTART)
+            autostart = autostart_page.autostart_check.isChecked()
+            summary += f"  开机自启: {'是' if autostart else '否'}\n"
 
         self.summary.setText(summary)
 
@@ -564,6 +689,22 @@ class SetupWizard(QWizard):
     def get_config(self) -> dict:
         """从向导收集配置"""
         server_page = self.page(WizardPageId.SERVER)
+        registered_config = getattr(self, "_registered_config", None)
+
+        if registered_config:
+            dev_type = registered_config.get("device_type", "user")
+            return {
+                "server_host": server_page.host_edit.text().strip(),
+                "server_tcp_port": int(server_page.tcp_port_edit.text().strip()),
+                "server_http_port": int(server_page.http_port_edit.text().strip()),
+                "device_name": registered_config.get("device_name", ""),
+                "device_type": dev_type,
+                "auto_start": config.auto_start,
+                "shared_printers": registered_config.get("shared_printers", []),
+                "virtual_printers": [],
+                "configured": True,
+            }
+
         device_page = self.page(WizardPageId.DEVICE)
         autostart_page = self.page(WizardPageId.AUTOSTART)
 

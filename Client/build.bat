@@ -37,7 +37,9 @@ echo.
 
 echo Killing running EasyPrint Client...
 taskkill /f /im "EasyPrint Client.exe" >nul 2>nul
-timeout /t 1 /nobreak >nul
+taskkill /f /im "EasyPrintClient.exe" >nul 2>nul
+taskkill /f /im "python.exe" /fi "WINDOWTITLE eq EasyPrint Client" >nul 2>nul
+timeout /t 2 /nobreak >nul
 
 echo Cleaning old output...
 if exist "dist\EasyPrint Client.exe" del /f /q "dist\EasyPrint Client.exe"

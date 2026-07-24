@@ -94,6 +94,16 @@ async def root():
     }
 
 
+@app.get("/api/info", summary="Get server info")
+async def server_info():
+    """Get server version and status info"""
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "status": "running",
+    }
+
+
 @app.get("/health")
 async def health():
     """Health check endpoint"""

@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Server
     APP_NAME: str = "EasyPrint Server"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "0.1.2"
     DEBUG: bool = True
 
     # HTTP API

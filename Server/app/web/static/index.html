@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EasyPrint Server - 管理后台</title>
-    <link rel="stylesheet" href="https://cdn.staticfile.org/element-plus/2.3.14/index.min.css">
-    <link rel="stylesheet" id="dark-css" href="https://cdn.staticfile.org/element-plus/2.3.14/theme-chalk/dark/css-vars.min.css">
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/element-plus/2.3.14/index.min.css">
+    <link rel="stylesheet" id="dark-css" href="https://cdn.bootcdn.net/ajax/libs/element-plus/2.3.14/theme-chalk/dark/css-vars.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #f0f2f5; }
@@ -88,29 +88,66 @@
             background-color: #fafafa;
             font-weight: 500;
         }
+        html.dark .el-table,
+        html.dark .el-table__inner-wrapper,
+        html.dark .el-table__header-wrapper,
+        html.dark .el-table__body-wrapper,
+        html.dark .el-table__footer-wrapper {
+            background-color: #1d1e1f !important;
+        }
         html.dark .el-table th.el-table__cell {
-            background-color: #1d1e1f;
-            color: #cfd3dc;
-        }
-        html.dark .el-table tr {
-            background-color: #1d1e1f;
-        }
-        html.dark .el-table tr.el-table__row--striped {
-            background-color: #262727 !important;
-        }
-        html.dark .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
-            background-color: #2d2e2f;
-        }
-        html.dark .el-table td.el-table__cell {
+            background-color: #1d1e1f !important;
             color: #cfd3dc;
             border-bottom-color: #414243;
         }
-        html.dark .el-table::before {
+        html.dark .el-table tr {
+            background-color: #1d1e1f !important;
+        }
+        html.dark .el-table tr.el-table__row--striped td.el-table__cell {
+            background-color: #262727 !important;
+        }
+        html.dark .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell,
+        html.dark .el-table--enable-row-hover .el-table__body tr.el-table__row--striped:hover > td.el-table__cell {
+            background-color: #2d2e2f !important;
+        }
+        html.dark .el-table td.el-table__cell {
+            background-color: inherit !important;
+            color: #cfd3dc;
+            border-bottom-color: #414243;
+        }
+        html.dark .el-table::before,
+        html.dark .el-table--border::after {
             background-color: #414243;
+        }
+        html.dark .el-table--border td.el-table__cell,
+        html.dark .el-table--border th.el-table__cell {
+            border-right-color: #414243;
+        }
+        html.dark .el-pagination .el-pager li,
+        html.dark .el-pagination .el-pagination__total,
+        html.dark .el-pagination .btn-prev,
+        html.dark .el-pagination .btn-next,
+        html.dark .el-pagination .el-pagination__jump {
+            background-color: transparent !important;
+            color: #cfd3dc;
+        }
+        html.dark .el-pagination .el-pager li.is-active {
+            background-color: #409eff !important;
+            color: #fff;
         }
         .el-table .el-button {
             padding: 4px 10px;
             font-size: 12px;
+        }
+        .pagination {
+            margin-top: 16px;
+            justify-content: flex-end;
+        }
+        html.dark .el-pagination {
+            --el-pagination-bg-color: transparent;
+            --el-pagination-text-color: #e0e0e0;
+            --el-pagination-button-color: #e0e0e0;
+            --el-pagination-button-disabled-bg-color: transparent;
         }
         .el-table {
             width: 100%;
@@ -194,7 +231,7 @@
                             <el-checkbox v-model="autoRefresh" size="small">自动刷新 (5秒)</el-checkbox>
                         </span>
                     </div>
-                    <el-table :data="devices" stripe width="100%" table-layout="auto">
+                    <el-table :data="pagedDevices" stripe width="100%" table-layout="auto">
                         <el-table-column prop="device_id" label="设备ID" width="200"></el-table-column>
                         <el-table-column prop="device_name" label="设备名称" width="160"></el-table-column>
                         <el-table-column label="类型" width="100">
@@ -217,12 +254,20 @@
                             </template>
                         </el-table-column>
                         <el-table-column prop="os_version" label="操作系统" width="200"></el-table-column>
-                        <el-table-column label="操作" width="140">
+                        <el-table-column label="操作" width="200">
                             <template #default="scope">
+                                <el-button size="small" type="primary" @click="editDevice(scope.row)">编辑</el-button>
                                 <el-button size="small" type="danger" @click="deleteDevice(scope.row)">删除</el-button>
                             </template>
                         </el-table-column>
                     </el-table>
+                    <el-pagination
+                        v-model:current-page="devicePage"
+                        :page-size="8"
+                        :total="devices.length"
+                        layout="total, prev, pager, next, jumper"
+                        class="pagination"
+                    />
                 </div>
             </el-tab-pane>
 
@@ -233,9 +278,16 @@
                         打印机列表
                         <el-button class="refresh-btn" size="small" type="primary" @click="loadPrinters">刷新</el-button>
                     </div>
-                    <el-table :data="printers" stripe width="100%" table-layout="auto">
+                    <el-table :data="pagedPrinters" stripe width="100%" table-layout="auto">
                         <el-table-column prop="printer_id" label="打印机ID" width="300"></el-table-column>
-                        <el-table-column prop="name" label="名称" width="240"></el-table-column>
+                        <el-table-column label="名称" width="320">
+                            <template #default="scope">
+                                <span v-if="scope.row.host_device_name">
+                                    [{{ scope.row.host_device_name }}] {{ scope.row.name }}
+                                </span>
+                                <span v-else>{{ scope.row.name }}</span>
+                            </template>
+                        </el-table-column>
                         <el-table-column prop="model" label="型号" width="240"></el-table-column>
                         <el-table-column label="状态" width="130">
                             <template #default="scope">
@@ -255,6 +307,13 @@
                             </template>
                         </el-table-column>
                     </el-table>
+                    <el-pagination
+                        v-model:current-page="printerPage"
+                        :page-size="8"
+                        :total="printers.length"
+                        layout="total, prev, pager, next, jumper"
+                        class="pagination"
+                    />
                 </div>
             </el-tab-pane>
 
@@ -265,7 +324,7 @@
                         任务列表
                         <el-button class="refresh-btn" size="small" type="primary" @click="loadJobs">刷新</el-button>
                     </div>
-                    <el-table :data="jobs" stripe width="100%" table-layout="auto">
+                    <el-table :data="pagedJobs" stripe width="100%" table-layout="auto">
                         <el-table-column prop="job_id" label="任务ID" width="200"></el-table-column>
                         <el-table-column prop="job_name" label="任务名称" width="300"></el-table-column>
                         <el-table-column label="状态" width="120">
@@ -293,6 +352,13 @@
                             </template>
                         </el-table-column>
                     </el-table>
+                    <el-pagination
+                        v-model:current-page="jobPage"
+                        :page-size="8"
+                        :total="jobs.length"
+                        layout="total, prev, pager, next, jumper"
+                        class="pagination"
+                    />
                 </div>
             </el-tab-pane>
 
@@ -305,7 +371,7 @@
                     </div>
                     <el-timeline>
                         <el-timeline-item
-                            v-for="log in logs"
+                            v-for="log in pagedLogs"
                             :key="log.id"
                             :type="logActionType(log.action)"
                             :timestamp="formatTime(log.created_at)">
@@ -314,16 +380,23 @@
                         </el-timeline-item>
                     </el-timeline>
                     <el-empty v-if="logs.length === 0" description="暂无日志"></el-empty>
+                    <el-pagination
+                        v-model:current-page="logPage"
+                        :page-size="8"
+                        :total="logs.length"
+                        layout="total, prev, pager, next, jumper"
+                        class="pagination"
+                    />
                 </div>
             </el-tab-pane>
         </el-tabs>
     </div>
 </div>
 
-<script src="https://cdn.staticfile.org/vue/3.3.4/vue.global.prod.min.js"></script>
-<script src="https://cdn.staticfile.org/element-plus/2.3.14/index.full.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/vue/3.3.4/vue.global.prod.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/element-plus/2.3.14/index.full.js"></script>
 <script>
-    const { createApp, ref, onMounted, onUnmounted } = Vue;
+    const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
     const { ElMessage, ElMessageBox } = ElementPlus;
 
     const API_BASE = '/api';
@@ -343,9 +416,29 @@
                 today_jobs: 0
             });
             const devices = ref([]);
+            const devicePage = ref(1);
+            const pagedDevices = computed(() => {
+                const start = (devicePage.value - 1) * 8;
+                return devices.value.slice(start, start + 8);
+            });
             const printers = ref([]);
+            const printerPage = ref(1);
+            const pagedPrinters = computed(() => {
+                const start = (printerPage.value - 1) * 8;
+                return printers.value.slice(start, start + 8);
+            });
             const jobs = ref([]);
+            const jobPage = ref(1);
+            const pagedJobs = computed(() => {
+                const start = (jobPage.value - 1) * 8;
+                return jobs.value.slice(start, start + 8);
+            });
             const logs = ref([]);
+            const logPage = ref(1);
+            const pagedLogs = computed(() => {
+                const start = (logPage.value - 1) * 8;
+                return logs.value.slice(start, start + 8);
+            });
             let refreshTimer = null;
 
             async function fetchJson(url) {
@@ -392,6 +485,40 @@
                     loadJobs(),
                     loadLogs()
                 ]);
+            }
+
+            async function editDevice(device) {
+                try {
+                    const { value } = await ElMessageBox.prompt(
+                        '请输入新的设备名称',
+                        '编辑设备',
+                        {
+                            confirmButtonText: '确定',
+                            cancelButtonText: '取消',
+                            inputValue: device.device_name || '',
+                            inputPlaceholder: '例如：市场部、办公室',
+                            inputValidator: (value) => {
+                                if (!value || !value.trim()) {
+                                    return '设备名称不能为空';
+                                }
+                                return true;
+                            }
+                        }
+                    );
+                    const res = await fetch(`${API_BASE}/devices/${device.device_id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ device_name: value.trim() })
+                    });
+                    if (res.ok) {
+                        ElMessage.success('修改成功');
+                        loadDevices();
+                    } else {
+                        ElMessage.error('修改失败');
+                    }
+                } catch (e) {
+                    // cancelled
+                }
             }
 
             async function deleteDevice(device) {
@@ -544,7 +671,7 @@
             onMounted(async () => {
                 initTheme();
                 // Load version
-                const info = await fetchJson('/');
+                const info = await fetchJson(`${API_BASE}/info`);
                 if (info) version.value = info.version;
 
                 await loadAll();
@@ -560,9 +687,12 @@
 
             return {
                 activeTab, autoRefresh, version, isDark, stats,
-                devices, printers, jobs, logs,
+                devices, devicePage, pagedDevices,
+                printers, printerPage, pagedPrinters,
+                jobs, jobPage, pagedJobs,
+                logs, logPage, pagedLogs,
                 loadDevices, loadPrinters, loadJobs, loadLogs,
-                deleteDevice, deletePrinter, cancelJob,
+                editDevice, deleteDevice, deletePrinter, cancelJob,
                 typeLabel, printerStatusType, printerStatusLabel,
                 jobStatusType, jobStatusLabel,
                 logActionType, logActionLabel,

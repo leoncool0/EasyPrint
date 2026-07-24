@@ -185,12 +185,19 @@ class MainWindow(QMainWindow):
         """打印机列表更新"""
         self.printer_list.clear()
         for p in printers:
+            host_device_name = p.get("host_device_name", "")
             name = p.get("name", "未知")
             model = p.get("model", "")
             status = p.get("status", "")
             status_map = {"online": "在线", "offline": "离线", "busy": "忙碌", "error": "错误"}
             status_text = status_map.get(status, status)
-            self.printer_list.addItem(f"{name}  ({model}) - {status_text}")
+            
+            if host_device_name:
+                display_name = f"[{host_device_name}] {name}"
+            else:
+                display_name = name
+            
+            self.printer_list.addItem(f"{display_name}  ({model}) - {status_text}")
 
     def _on_job_status(self, job_id: str, status: str, job_type: str = "", detail: str = ""):
         """打印任务状态更新
