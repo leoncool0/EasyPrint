@@ -160,12 +160,13 @@ class VirtualPrinterManager:
         logger.error("系统上未找到合适的打印机驱动")
         return None
 
-    def create_virtual_printer(self, display_name: str, target_printer_id: str) -> Tuple[bool, str]:
+    def create_virtual_printer(self, display_name: str, target_printer_id: str, host_device_name: str = "") -> Tuple[bool, str]:
         """创建虚拟打印机
 
         Args:
-            display_name: 显示名称（如 "前台HP打印机"）
+            display_name: 显示名称（如 "[前台电脑] HP打印机"）
             target_printer_id: 服务端对应的 printer_id（用于标识）
+            host_device_name: 主机设备名称（用于保存到 Comment 信息）
 
         Returns:
             (success, error_message)
@@ -193,8 +194,27 @@ class VirtualPrinterManager:
                     logger.info(f"虚拟打印机已存在: {printer_name}")
                     return True, ""
 
+            # 使用 level=2 创建打印机，保存更多信息
+            try:
+                comment = f"EasyPrint:{target_printer_id}"
+                if host_device_name:
+                    comment += f"|Host:{host_device_name}"
+
+                printer_info_2 = {
+                    "pPrinterName": printer_name,
+                    "pPortName": "LPT1:",
+                    "pDriverName": driver_name,
+                    "pComment": comment,
+                }
+                handle = win32print.AddPrinter(None, 2, printer_info_2)
+                if handle:
+                    win32print.ClosePrinter(handle)
+                    logger.info(f"虚拟打印机已创建: {printer_name} (驱动: {driver_name})")
+                    return True, ""
+            except Exception:
+                pass
+
             # 使用 level=1 创建打印机（字段更少）
-            import win32print
             try:
                 printer_info_1 = {
                     "pPrinterName": printer_name,
@@ -204,7 +224,7 @@ class VirtualPrinterManager:
                 handle = win32print.AddPrinter(None, 1, printer_info_1)
                 if handle:
                     win32print.ClosePrinter(handle)
-                    logger.info(f"虚拟打印机已创建: {printer_name} (驱动: {driver_name})")
+                    logger.info(f"虚拟打印机已创建(简化): {printer_name}")
                     return True, ""
             except Exception:
                 pass
@@ -259,15 +279,22 @@ class VirtualPrinterManager:
                 name = p.get("pPrinterName", "")
                 if name.startswith(f"{PRINTER_PREFIX} - "):
                     display_name = name[len(f"{PRINTER_PREFIX} - "):]
-                    # 从 Comment 提取 target_printer_id
+                    # 从 Comment 提取 target_printer_id 和 host_device_name
                     comment = p.get("pComment", "")
                     target_id = ""
+                    host_device_name = ""
                     if comment.startswith("EasyPrint:"):
-                        target_id = comment[len("EasyPrint:"):]
+                        # 格式: EasyPrint:{printer_id}|Host:{host_device_name}
+                        parts = comment.split("|")
+                        target_id = parts[0][len("EasyPrint:"):]
+                        for part in parts[1:]:
+                            if part.startswith("Host:"):
+                                host_device_name = part[len("Host:"):]
                     result.append({
                         "name": display_name,
                         "printer_name": name,
                         "target_printer_id": target_id,
+                        "host_device_name": host_device_name,
                         "port": p.get("pPortName", ""),
                     })
         except Exception as e:
@@ -278,16 +305,30 @@ class VirtualPrinterManager:
         """批量安装虚拟打印机
 
         Args:
-            printers: [{"name": "显示名", "printer_id": "服务端printer_id"}, ...]
+            printers: [{"name": "显示名", "printer_id": "服务端printer_id", "host_device_name": "主机设备名"}, ...]
         Returns:
             (成功安装的列表, 失败原因列表)
         """
         installed = []
         errors = []
         for p in printers:
-            ok, err = self.create_virtual_printer(p["name"], p["printer_id"])
-            if ok:
-                installed.append(p)
+            name = p.get("name", "")
+            printer_id = p.get("printer_id", "")
+            host_device_name = p.get("host_device_name", "")
+
+            # 如果显示名还没有设备名称前缀，自动添加
+            if host_device_name and not name.startswith("["):
+                display_name = f"[{host_device_name}] {name}"
             else:
-                errors.append(f"{p.get('name', 'Unknown')}: {err}")
+                display_name = name
+
+            ok, err = self.create_virtual_printer(display_name, printer_id, host_device_name)
+            if ok:
+                installed.append({
+                    "name": display_name,
+                    "printer_id": printer_id,
+                    "host_device_name": host_device_name,
+                })
+            else:
+                errors.append(f"{display_name}: {err}")
         return installed, errors

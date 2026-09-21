@@ -539,12 +539,24 @@ class UserPrinterPage(QWizardPage):
         installed = []
         errors = []
         for i, p in enumerate(selected):
-            display_name = p.get("name", "Unknown")
+            printer_name = p.get("name", "Unknown")
+            host_device_name = p.get("host_device_name", "")
             printer_id = p.get("printer_id", "")
+
+            # 虚拟打印机名称格式: EasyPrint - [设备名称] 打印机名称
+            if host_device_name:
+                display_name = f"[{host_device_name}] {printer_name}"
+            else:
+                display_name = printer_name
+
             self.fetch_status.setText(f"正在安装: {display_name}...")
-            ok, err = vpm.create_virtual_printer(display_name, printer_id)
+            ok, err = vpm.create_virtual_printer(display_name, printer_id, host_device_name)
             if ok:
-                installed.append({"name": display_name, "printer_id": printer_id})
+                installed.append({
+                    "name": display_name,
+                    "printer_id": printer_id,
+                    "host_device_name": host_device_name,
+                })
             else:
                 errors.append(f"{display_name}: {err}")
             self.install_progress.setValue(i + 1)

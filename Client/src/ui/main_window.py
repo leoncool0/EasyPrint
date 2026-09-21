@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QPushButton, QListWidget,
-    QGroupBox, QTabWidget, QMessageBox, QTableWidget,
+    QGroupBox, QMessageBox, QTableWidget,
     QTableWidgetItem, QHeaderView
 )
-from PySide6.QtCore import QTimer, Signal
+from PySide6.QtCore import QTimer, Signal, Qt
 
 from src.core.config_manager import config, APP_NAME, APP_VERSION
+from src.utils.autostart import enable_autostart, disable_autostart, is_autostart_enabled
 
 if TYPE_CHECKING:
     from src.core.client import Client
@@ -45,7 +46,6 @@ class MainWindow(QMainWindow):
 
         # 注册客户端回调
         self.client.on_status_changed(self._on_status_changed)
-        self.client.on_printers_updated(self._on_printers_updated)
         self.client.on_job_status(self._on_job_status)
 
         # 最小化到托盘标志
@@ -77,28 +77,19 @@ class MainWindow(QMainWindow):
         self.spool_status_label = QLabel("-")
         status_layout.addRow("打印监视:", self.spool_status_label)
 
+        # 开机自启动切换按钮
+        self.autostart_btn = QPushButton()
+        self.autostart_btn.setCursor(Qt.PointingHandCursor)
+        self.autostart_btn.setFixedHeight(28)
+        self.autostart_btn.clicked.connect(self._on_autostart_clicked)
+        self._update_autostart_btn()
+        status_layout.addRow("开机自启:", self.autostart_btn)
+
         layout.addWidget(status_group)
 
-        # ==================== 中间标签页 ====================
-        tabs = QTabWidget()
-
-        # 打印机列表页
-        printer_tab = QWidget()
-        printer_layout = QVBoxLayout(printer_tab)
-
-        self.printer_list = QListWidget()
-        self.printer_list.setAlternatingRowColors(True)
-        printer_layout.addWidget(self.printer_list)
-
-        refresh_btn = QPushButton("刷新列表")
-        refresh_btn.clicked.connect(self._refresh_printers)
-        printer_layout.addWidget(refresh_btn)
-
-        tabs.addTab(printer_tab, "打印机列表")
-
-        # 任务状态页
-        job_tab = QWidget()
-        job_layout = QVBoxLayout(job_tab)
+        # ==================== 任务状态 ====================
+        job_group = QGroupBox("任务状态")
+        job_layout = QVBoxLayout(job_group)
 
         self.job_table = QTableWidget(0, 5)
         self.job_table.setHorizontalHeaderLabels(["任务ID", "类型", "状态", "时间", "详情"])
@@ -106,9 +97,7 @@ class MainWindow(QMainWindow):
         self.job_table.setAlternatingRowColors(True)
         job_layout.addWidget(self.job_table)
 
-        tabs.addTab(job_tab, "任务状态")
-
-        layout.addWidget(tabs)
+        layout.addWidget(job_group)
 
         # ==================== 底部按钮 ====================
         btn_layout = QHBoxLayout()
@@ -143,11 +132,48 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             self.settings_requested.emit()
 
-    def _refresh_printers(self):
-        if self.client.authenticated:
-            run_async(self.client.get_printer_list())
+    def _update_autostart_btn(self):
+        """更新自启按钮的显示状态（文字 + 颜色）"""
+        enabled = config.auto_start and is_autostart_enabled()
+        if enabled:
+            self.autostart_btn.setText("● 已开启")
+            self.autostart_btn.setStyleSheet(
+                "QPushButton { color: #52c41a; background: transparent; border: none; "
+                "font-weight: bold; text-align: left; padding: 0px; }"
+                "QPushButton:hover { color: #389e0d; text-decoration: underline; }"
+            )
         else:
-            QMessageBox.warning(self, "提示", "请先连接服务端")
+            self.autostart_btn.setText("○ 未开启")
+            self.autostart_btn.setStyleSheet(
+                "QPushButton { color: #ff4d4f; background: transparent; border: none; "
+                "font-weight: bold; text-align: left; padding: 0px; }"
+                "QPushButton:hover { color: #cf1322; text-decoration: underline; }"
+            )
+
+    def _on_autostart_clicked(self):
+        """切换开机自启状态"""
+        if config.auto_start and is_autostart_enabled():
+            # 当前已开启 → 关闭
+            ok = disable_autostart()
+            if ok:
+                config.set("auto_start", False)
+                config.save()
+                self._update_autostart_btn()
+                self.statusBar().showMessage("已关闭开机自启动", 3000)
+            else:
+                self.statusBar().showMessage("关闭开机自启失败，请检查权限", 5000)
+        else:
+            # 当前未开启 → 开启
+            ok = enable_autostart()
+            if ok:
+                config.set("auto_start", True)
+                config.save()
+                self._update_autostart_btn()
+                self.statusBar().showMessage("已开启开机自启动", 3000)
+            else:
+                self.statusBar().showMessage("开启开机自启失败，请检查权限", 5000)
+                # 回滚 UI 状态
+                self._update_autostart_btn()
 
     # ==================== 客户端回调 ====================
 
@@ -181,27 +207,9 @@ class MainWindow(QMainWindow):
             self.spool_status_label.setText("● 已停止")
             self.spool_status_label.setStyleSheet("color: #ff4d4f;")
 
-    def _on_printers_updated(self, printers: list):
-        """打印机列表更新"""
-        self.printer_list.clear()
-        for p in printers:
-            host_device_name = p.get("host_device_name", "")
-            name = p.get("name", "未知")
-            model = p.get("model", "")
-            status = p.get("status", "")
-            status_map = {"online": "在线", "offline": "离线", "busy": "忙碌", "error": "错误"}
-            status_text = status_map.get(status, status)
-            
-            if host_device_name:
-                display_name = f"[{host_device_name}] {name}"
-            else:
-                display_name = name
-            
-            self.printer_list.addItem(f"{display_name}  ({model}) - {status_text}")
-
     def _on_job_status(self, job_id: str, status: str, job_type: str = "", detail: str = ""):
         """打印任务状态更新
-        
+
         job_type: "发送" (用户端创建) / "接收" (主机端接收)
         """
         status_map = {

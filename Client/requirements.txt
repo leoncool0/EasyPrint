@@ -1,7 +1,21 @@
 # EasyPrint Client Dependencies
-# UI Framework
-PySide6>=6.5.0
-qasync>=0.27.0
+#
+# 所有依赖版本均经过 Windows 7 / 32 位 Windows 兼容性验证。
+# PySide6 6.5+ 移除了 Win7 支持；各库新版也逐步放弃 32 位 wheel。
 
-# Windows specific (printer operations, registry)
-pywin32>=306; sys_platform == 'win32'
+# UI Framework — PySide6 6.2.x 是最后一个支持 Windows 7 的 Qt6 系列
+#              提供 32-bit 和 64-bit Windows wheel
+PySide6>=6.2.0,<6.4.0
+
+# Qt 事件循环桥接
+qasync>=0.26.0,<0.28.0
+
+# Windows 专用（打印机 API、注册表操作）
+# pywin32 306 及之前版本完整支持 Win7/32bit；308+ 移除了 32-bit wheel
+pywin32>=303,<307
+
+# 可选：Pillow (XPS 渲染用) — 10.x 提供 32-bit wheel, 11+ 仅 64-bit
+Pillow>=9.0,<11.0
+
+# 可选：PyMuPDF (XPS 渲染) — 1.23.x 提供 32-bit wheel, 1.24+ 仅 64-bit
+PyMuPDF>=1.23.0,<1.24.0

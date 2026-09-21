@@ -18,12 +18,12 @@ DEFAULT_CONFIG = {
     "auto_start": False,
     "token": "",
     "shared_printers": [],     # 主机端: 要共享的本机打印机名称列表
-    "virtual_printers": [],    # 用户端: 已安装的虚拟打印机 [{name, printer_id}]
+    "virtual_printers": [],    # 用户端: 已安装的虚拟打印机 [{name, printer_id, host_device_name}]
     "configured": False,       # 是否已完成首次配置
 }
 
 APP_NAME = "EasyPrint Client"
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 
 
 class ConfigManager:
